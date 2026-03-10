@@ -333,7 +333,31 @@ export async function spawnSubagentDirect(
   const requesterAgentId = normalizeAgentId(
     ctx.requesterAgentIdOverride ?? parseAgentSessionKey(requesterInternalKey)?.agentId,
   );
-  const targetAgentId = requestedAgentId ? normalizeAgentId(requestedAgentId) : requesterAgentId;
+
+  // Infer targetAgentId from label when agentId is not explicitly specified
+  let targetAgentId: string;
+  if (requestedAgentId) {
+    // Explicit agentId takes priority
+    targetAgentId = normalizeAgentId(requestedAgentId);
+  } else if (label) {
+    // Try to infer agentId from label if it's in the allowed list
+    const allowAgents = resolveAgentConfig(cfg, requesterAgentId)?.subagents?.allowAgents ?? [];
+    const normalizedLabel = normalizeAgentId(label);
+    const normalizedAllowed = allowAgents
+      .map((a) => normalizeAgentId(a).toLowerCase())
+      .filter(Boolean);
+
+    if (normalizedAllowed.includes(normalizedLabel.toLowerCase())) {
+      // Label matches an allowed agent - use it
+      targetAgentId = normalizedLabel;
+    } else {
+      // Label not in allowed list, fall back to requester
+      targetAgentId = requesterAgentId;
+    }
+  } else {
+    // No label, fall back to requester
+    targetAgentId = requesterAgentId;
+  }
   if (targetAgentId !== requesterAgentId) {
     const allowAgents = resolveAgentConfig(cfg, requesterAgentId)?.subagents?.allowAgents ?? [];
     const allowAny = allowAgents.some((value) => value.trim() === "*");
